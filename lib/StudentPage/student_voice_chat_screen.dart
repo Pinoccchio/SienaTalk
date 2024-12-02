@@ -20,7 +20,6 @@ class StudentVoiceChatScreen extends StatefulWidget {
 class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   late String _chatId;
-  bool _isAnonymous = false;  // Toggle state for anonymous mode
 
   @override
   void initState() {
@@ -33,20 +32,20 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     return sortedIds.join('_');
   }
 
-  void _handleSubmitted(String text, String firstName, String lastName) {
+  void _handleSubmitted(String text, String firstName, String lastName, bool isAnonymous) {
     if (text.isNotEmpty) {
       _messageController.clear();
       FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('messages').add({
         'text': text,
         'senderId': widget.studentId,
-        'senderName': _isAnonymous ? 'Anonymous' : '$firstName $lastName',
-        'isAnonymous': _isAnonymous,
+        'senderName': isAnonymous ? 'Anonymous' : '$firstName $lastName',
+        'isAnonymous': isAnonymous,
         'timestamp': FieldValue.serverTimestamp(),
       });
     }
   }
 
-  Widget _buildTextComposer(String firstName, String lastName) {
+  Widget _buildTextComposer(String firstName, String lastName, bool isAnonymous) {
     return Container(
       margin: EdgeInsets.all(8.0),
       child: Row(
@@ -54,7 +53,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
           Expanded(
             child: TextField(
               controller: _messageController,
-              onSubmitted: (text) => _handleSubmitted(text, firstName, lastName),
+              onSubmitted: (text) => _handleSubmitted(text, firstName, lastName, isAnonymous),
               decoration: InputDecoration(
                 hintText: 'Send a message',
                 border: OutlineInputBorder(
@@ -76,7 +75,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
             ),
             child: IconButton(
               icon: Icon(Icons.send, color: AppTheme.pureWhite),
-              onPressed: () => _handleSubmitted(_messageController.text, firstName, lastName),
+              onPressed: () => _handleSubmitted(_messageController.text, firstName, lastName, isAnonymous),
             ),
           ),
         ],
@@ -119,19 +118,6 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
           appBar: AppBar(
             title: Text('Chat with ${widget.chatPartnerName}'),
             backgroundColor: AppTheme.primaryRed,
-            actions: [
-              IconButton(
-                icon: Icon(
-                  _isAnonymous ? Icons.visibility_off : Icons.visibility,
-                  color: AppTheme.pureWhite,
-                ),
-                onPressed: () {
-                  setState(() {
-                    _isAnonymous = !_isAnonymous; // Toggle anonymous mode
-                  });
-                },
-              ),
-            ],
           ),
           body: Column(
             children: [
@@ -169,7 +155,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
                 ),
               ),
               Divider(height: 1),
-              _buildTextComposer(firstName, lastName),
+              _buildTextComposer(firstName, lastName, isAnonymous),
             ],
           ),
         );
@@ -207,12 +193,18 @@ class ChatMessage extends StatelessWidget {
               ),
             ),
             SizedBox(width: 10),
+          ] else if (!isStudent && isAnonymous) ...[
+            CircleAvatar(
+              backgroundColor: Colors.grey,  // Gray color for anonymous users
+              child: Icon(Icons.person_outline, color: AppTheme.primaryRed), // Placeholder for anonymous icon
+            ),
+            SizedBox(width: 10),
           ],
           Expanded(
             child: Container(
               padding: EdgeInsets.symmetric(vertical: 10.0, horizontal: 15.0),
               decoration: BoxDecoration(
-                color: isStudent ? AppTheme.primaryRed : AppTheme.accentYellow,
+                color: isStudent ? AppTheme.primaryRed : (isAnonymous ? Colors.grey[300] : AppTheme.accentYellow),
                 borderRadius: BorderRadius.circular(20.0),
                 boxShadow: [
                   BoxShadow(
@@ -225,7 +217,6 @@ class ChatMessage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: isStudent ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  // Here, we display either "Anonymous" or the actual sender's name based on anonymous mode
                   Text(
                     isAnonymous ? 'Anonymous' : sender,
                     style: TextStyle(

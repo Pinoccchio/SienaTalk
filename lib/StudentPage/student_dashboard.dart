@@ -5,7 +5,7 @@ import 'package:sienatalk/StudentPage/profile_screen.dart';
 import 'package:sienatalk/StudentPage/recent_activity_screen.dart';
 import 'package:sienatalk/StudentPage/student_schedule_request.dart';
 import 'package:sienatalk/StudentPage/student_schedule_view.dart';
-import 'package:sienatalk/StudentPage/chat_list_screen.dart';
+import 'package:sienatalk/StudentPage/student_chat_list_screen.dart';
 import '../theme/app_theme.dart';
 
 class StudentDashboard extends StatefulWidget {
@@ -228,7 +228,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     title: 'Chat',
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => ChatListScreen(studentId: widget.studentId)),
+                      MaterialPageRoute(builder: (context) => StudentChatListScreen(studentId: widget.studentId)),
                     ),
                   ),
                   _buildFeatureCard(

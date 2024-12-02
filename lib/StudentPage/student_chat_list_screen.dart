@@ -3,10 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sienatalk/theme/app_theme.dart';
 import 'package:sienatalk/StudentPage/student_voice_chat_screen.dart';
 
-class ChatListScreen extends StatelessWidget {
+class StudentChatListScreen extends StatelessWidget {
   final String studentId;
 
-  ChatListScreen({required this.studentId});
+  StudentChatListScreen({required this.studentId});
 
   @override
   Widget build(BuildContext context) {
