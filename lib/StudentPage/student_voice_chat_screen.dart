@@ -2,25 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sienatalk/theme/app_theme.dart';
 
-class VoiceChatScreen extends StatefulWidget {
+class StudentVoiceChatScreen extends StatefulWidget {
   final String studentId;
   final String chatPartnerId;
   final String chatPartnerName;
 
-  VoiceChatScreen({
+  StudentVoiceChatScreen({
     required this.studentId,
     required this.chatPartnerId,
     required this.chatPartnerName,
   });
 
   @override
-  _VoiceChatScreenState createState() => _VoiceChatScreenState();
+  _StudentVoiceChatScreenState createState() => _StudentVoiceChatScreenState();
 }
 
-class _VoiceChatScreenState extends State<VoiceChatScreen> {
+class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  bool _isAnonymous = false;
   late String _chatId;
+  bool _isAnonymous = false;  // Toggle state for anonymous mode
 
   @override
   void initState() {
@@ -29,24 +29,24 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
   }
 
   String _getChatId(String id1, String id2) {
-    final sortedIds = [id1, id2]..sort(); // Correctly sorts the IDs.
-    return sortedIds.join('_'); // Joins the sorted IDs with an underscore.
+    final sortedIds = [id1, id2]..sort();
+    return sortedIds.join('_');
   }
 
-  void _handleSubmitted(String text) {
+  void _handleSubmitted(String text, String firstName, String lastName) {
     if (text.isNotEmpty) {
       _messageController.clear();
       FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('messages').add({
         'text': text,
         'senderId': widget.studentId,
-        'senderName': _isAnonymous ? 'Anonymous' : 'Student',
+        'senderName': _isAnonymous ? 'Anonymous' : '$firstName $lastName',
         'isAnonymous': _isAnonymous,
         'timestamp': FieldValue.serverTimestamp(),
       });
     }
   }
 
-  Widget _buildTextComposer() {
+  Widget _buildTextComposer(String firstName, String lastName) {
     return Container(
       margin: EdgeInsets.all(8.0),
       child: Row(
@@ -54,7 +54,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
           Expanded(
             child: TextField(
               controller: _messageController,
-              onSubmitted: _handleSubmitted,
+              onSubmitted: (text) => _handleSubmitted(text, firstName, lastName),
               decoration: InputDecoration(
                 hintText: 'Send a message',
                 border: OutlineInputBorder(
@@ -76,7 +76,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
             ),
             child: IconButton(
               icon: Icon(Icons.send, color: AppTheme.pureWhite),
-              onPressed: () => _handleSubmitted(_messageController.text),
+              onPressed: () => _handleSubmitted(_messageController.text, firstName, lastName),
             ),
           ),
         ],
@@ -86,72 +86,94 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Chat with ${widget.chatPartnerName}'),
-        backgroundColor: AppTheme.primaryRed,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            child: Row(
-              children: [
-                Text(
-                  _isAnonymous ? 'Anonymous' : 'Normal',
-                  style: TextStyle(color: AppTheme.pureWhite),
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .doc(widget.studentId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(child: Text('Error: ${snapshot.error}')),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Scaffold(
+            body: Center(child: Text('Student data not found')),
+          );
+        }
+
+        final studentData = snapshot.data!.data() as Map<String, dynamic>;
+        final firstName = studentData['firstName'] as String;
+        final lastName = studentData['lastName'] as String;
+        final isAnonymous = studentData['isAnonymous'] as bool? ?? false;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Chat with ${widget.chatPartnerName}'),
+            backgroundColor: AppTheme.primaryRed,
+            actions: [
+              IconButton(
+                icon: Icon(
+                  _isAnonymous ? Icons.visibility_off : Icons.visibility,
+                  color: AppTheme.pureWhite,
                 ),
-                Switch(
-                  value: _isAnonymous,
-                  onChanged: (value) {
-                    setState(() {
-                      _isAnonymous = value;
-                    });
-                  },
-                  activeColor: AppTheme.accentYellow,
-                ),
-              ],
-            ),
+                onPressed: () {
+                  setState(() {
+                    _isAnonymous = !_isAnonymous; // Toggle anonymous mode
+                  });
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chats')
-                  .doc(_chatId)
-                  .collection('messages')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
+          body: Column(
+            children: [
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('chats')
+                      .doc(_chatId)
+                      .collection('messages')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
 
-                return ListView.builder(
-                  reverse: true,
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    var message = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                    return ChatMessage(
-                      text: message['text'],
-                      isAnonymous: message['isAnonymous'],
-                      sender: message['senderName'],
-                      isStudent: message['senderId'] == widget.studentId,
+                    return ListView.builder(
+                      reverse: true,
+                      itemCount: snapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        var message = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                        return ChatMessage(
+                          text: message['text'],
+                          isAnonymous: message['isAnonymous'],
+                          sender: message['senderName'],
+                          isStudent: message['senderId'] == widget.studentId,
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+              Divider(height: 1),
+              _buildTextComposer(firstName, lastName),
+            ],
           ),
-          Divider(height: 1),
-          _buildTextComposer(),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -203,6 +225,7 @@ class ChatMessage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: isStudent ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
+                  // Here, we display either "Anonymous" or the actual sender's name based on anonymous mode
                   Text(
                     isAnonymous ? 'Anonymous' : sender,
                     style: TextStyle(

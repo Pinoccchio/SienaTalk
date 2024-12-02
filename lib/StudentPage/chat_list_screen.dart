@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:sienatalk/theme/app_theme.dart';
-import 'package:sienatalk/StudentPage/voice_chat_screen.dart';
+import 'package:sienatalk/StudentPage/student_voice_chat_screen.dart';
 
 class ChatListScreen extends StatelessWidget {
   final String studentId;
@@ -83,7 +83,7 @@ class ChatListScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => VoiceChatScreen(
+                        builder: (context) => StudentVoiceChatScreen(
                           studentId: studentId,
                           chatPartnerId: id,
                           chatPartnerName: '$firstName $lastName',
