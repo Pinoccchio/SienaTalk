@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:sienatalk/AdminPage/admin_dashboard.dart';
 import '../helpers/database_helper.dart';
 import 'ACCOUNTS/static_accounts.dart';
 import 'EmployeePage/employee_dashboard.dart';
@@ -139,8 +140,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         ));
         break;
       case 'admin':
-      // TODO: Implement AdminDashboard
-        _navigateToLogin();
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (context) => AdminDashboard(adminId: userId),
+        ));
         break;
       default:
         _navigateToLogin();

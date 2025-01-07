@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
+import 'AdminPage/admin_dashboard.dart';
 import 'EmployeePage/employee_dashboard.dart';
 import 'StudentPage/student_dashboard.dart';
 import 'helpers/database_helper.dart';
@@ -221,13 +222,11 @@ class _LoginScreenState extends State<LoginScreen> {
           builder: (context) => EmployeeDashboard(employeeId: userId),
         ));
         break;
-        /*
       case 'admin':
         Navigator.of(context).pushReplacement(MaterialPageRoute(
           builder: (context) => AdminDashboard(adminId: userId),
         ));
         break;
-         */
     }
   }
 

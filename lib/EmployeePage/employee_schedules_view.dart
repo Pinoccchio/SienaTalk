@@ -99,7 +99,7 @@ class _EmployeeSchedulesViewState extends State<EmployeeSchedulesView> {
             onPressed: () => Navigator.pop(context),
           ),
           Text(
-            'Employee Schedules',
+            'Students Schedules',
             style: TextStyle(
               color: AppTheme.pureWhite,
               fontSize: 20,
