@@ -8,12 +8,14 @@ class AdminChatViewScreen extends StatefulWidget {
   final String chatId;
   final String studentName;
   final String employeeName;
+  final bool isAnonymous;
 
   const AdminChatViewScreen({
     Key? key,
     required this.chatId,
     required this.studentName,
     required this.employeeName,
+    required this.isAnonymous,
   }) : super(key: key);
 
   @override
@@ -60,7 +62,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.studentName} - ${widget.employeeName}'),
+        title: Text(widget.isAnonymous
+            ? '${widget.studentName} (Anonymous) - ${widget.employeeName}'
+            : '${widget.studentName} - ${widget.employeeName}'),
         backgroundColor: AppTheme.primaryRed,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -89,7 +93,9 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
               final messageId = messages[index].id;
               final senderId = message['senderId'] ?? '';
               final isStudent = senderId.startsWith('S');
-              final senderName = isStudent ? widget.studentName : widget.employeeName;
+              final senderName = isStudent
+                  ? (widget.isAnonymous ? widget.studentName : 'Student')
+                  : widget.employeeName;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -165,3 +171,4 @@ class _AdminChatViewScreenState extends State<AdminChatViewScreen> {
     return DateFormat.yMd().add_jm().format(timestamp.toDate());
   }
 }
+

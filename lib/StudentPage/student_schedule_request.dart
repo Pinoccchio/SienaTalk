@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart'; // Import intl package for time formatting
+import 'package:intl/intl.dart';
 
 class StudentScheduleRequest extends StatefulWidget {
   final String studentId;
+  final DateTime initialDate;
 
-  const StudentScheduleRequest({Key? key, required this.studentId}) : super(key: key);
+  const StudentScheduleRequest({
+    Key? key,
+    required this.studentId,
+    required this.initialDate,
+  }) : super(key: key);
 
   @override
   _StudentScheduleRequestState createState() => _StudentScheduleRequestState();
@@ -13,13 +18,12 @@ class StudentScheduleRequest extends StatefulWidget {
 
 class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
   final _formKey = GlobalKey<FormState>();
-  String? _selectedReason; // Dropdown value
-  DateTime _selectedDate = DateTime.now();
+  String? _selectedReason;
+  late DateTime _selectedDate;
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _isUrgent = false;
   bool _isAnonymous = false;
 
-  // Fetching student name from Firestore
   String _firstName = '';
   String _middleName = '';
   String _lastName = '';
@@ -27,14 +31,14 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
   @override
   void initState() {
     super.initState();
+    _selectedDate = widget.initialDate;
     _fetchStudentDetails();
   }
 
-  // Fetch student details from Firestore
   Future<void> _fetchStudentDetails() async {
     try {
       DocumentSnapshot studentDoc = await FirebaseFirestore.instance
-          .collection('students') // Assuming you have a collection called "students"
+          .collection('students')
           .doc(widget.studentId)
           .get();
 
@@ -50,33 +54,58 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
     }
   }
 
-  // Format the time as 12-hour format with AM/PM (e.g., 10:41 PM)
   String _formatTime(TimeOfDay time) {
-    final now = DateTime(2022, 1, 1, time.hour, time.minute); // Convert TimeOfDay to DateTime
-    return DateFormat.jm().format(now); // Format as 12-hour time with AM/PM
+    final now = DateTime(2022, 1, 1, time.hour, time.minute);
+    return DateFormat.jm().format(now);
+  }
+
+  Future<bool> _checkExistingSchedule() async {
+    final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final endOfDay = startOfDay.add(Duration(days: 1));
+
+    final existingSchedules = await FirebaseFirestore.instance
+        .collection('scheduleRequests')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where('date', isLessThan: Timestamp.fromDate(endOfDay))
+        .get();
+
+    return existingSchedules.docs.isNotEmpty;
   }
 
   Future<void> _submitRequest() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
       try {
+        // Check for existing schedules on the selected date
+        bool hasExistingSchedule = await _checkExistingSchedule();
+
+        if (hasExistingSchedule) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('This date is already booked. Please choose another date.')),
+          );
+          return;
+        }
+
         await FirebaseFirestore.instance.collection('scheduleRequests').add({
           'studentId': widget.studentId,
           'reason': _selectedReason,
           'date': Timestamp.fromDate(_selectedDate),
           'time': '${_selectedTime.hour}:${_selectedTime.minute.toString().padLeft(2, '0')}',
-          'formattedTime': _formatTime(_selectedTime), // Save the formatted time
+          'formattedTime': _formatTime(_selectedTime),
           'isUrgent': _isUrgent,
           'isAnonymous': _isAnonymous,
           'createdAt': FieldValue.serverTimestamp(),
           'firstName': _firstName,
           'middleName': _middleName,
           'lastName': _lastName,
+          'isNewForEmployee': true,
+          'isNewForAdmin': true,
+          'isNewForStudent': true,
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Request submitted successfully')),
         );
-        Navigator.pop(context, true); // Return true to indicate successful submission
+        Navigator.pop(context, true);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error submitting request: $e')),
@@ -98,7 +127,6 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Dropdown for reason
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(
                   labelText: 'Reason for scheduling',
@@ -130,10 +158,8 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
                 },
               ),
               SizedBox(height: 16),
-
-              // Date picker
               ListTile(
-                title: Text('Date: ${_selectedDate.toLocal()}'.split(' ')[0]),
+                title: Text('Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate)}'),
                 trailing: Icon(Icons.calendar_today),
                 onTap: () async {
                   final DateTime? picked = await showDatePicker(
@@ -149,8 +175,6 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
                   }
                 },
               ),
-
-              // Time picker
               ListTile(
                 title: Text('Time: ${_formatTime(_selectedTime)}'),
                 trailing: Icon(Icons.access_time),
@@ -166,8 +190,6 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
                   }
                 },
               ),
-
-              // Urgent switch
               SwitchListTile(
                 title: Text('Urgent'),
                 value: _isUrgent,
@@ -177,8 +199,6 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
                   });
                 },
               ),
-
-              // Anonymous switch
               SwitchListTile(
                 title: Text('Anonymous'),
                 value: _isAnonymous,
@@ -188,10 +208,7 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
                   });
                 },
               ),
-
               SizedBox(height: 24),
-
-              // Submit button
               ElevatedButton(
                 child: Text('Submit Request'),
                 onPressed: _submitRequest,
@@ -203,3 +220,4 @@ class _StudentScheduleRequestState extends State<StudentScheduleRequest> {
     );
   }
 }
+

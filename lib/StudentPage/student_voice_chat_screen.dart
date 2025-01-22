@@ -1,30 +1,37 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:sienatalk/theme/app_theme.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
+import 'package:sienatalk/theme/app_theme.dart';
+import 'message_bubble.dart';
 
 class StudentVoiceChatScreen extends StatefulWidget {
   final String studentId;
   final String chatPartnerId;
   final String chatPartnerName;
+  final bool isAnonymous;
+  final String anonymousName;
 
   const StudentVoiceChatScreen({
     Key? key,
     required this.studentId,
     required this.chatPartnerId,
     required this.chatPartnerName,
+    required this.isAnonymous,
+    required this.anonymousName,
   }) : super(key: key);
 
   @override
   _StudentVoiceChatScreenState createState() => _StudentVoiceChatScreenState();
 }
 
-class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
+class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late String _chatId;
@@ -34,7 +41,8 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
   String? _recordingPath;
   bool _isEditing = false;
   String? _editingMessageId;
-  String _studentName = 'Anonymous';
+  String _studentName = '';
+  late AnimationController _lottieController;
 
   @override
   void initState() {
@@ -42,6 +50,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     _chatId = _getChatId(widget.studentId, widget.chatPartnerId);
     _initializeRecorder();
     _fetchStudentData();
+    _lottieController = AnimationController(vsync: this);
   }
 
   @override
@@ -50,6 +59,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     _scrollController.dispose();
     _recorder.closeRecorder();
     _player.closePlayer();
+    _lottieController.dispose();
     super.dispose();
   }
 
@@ -64,20 +74,16 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
 
   Future<void> _fetchStudentData() async {
     try {
-      // Fetch the student's data from Firestore
-      DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
-
-      if (studentDoc.exists) {
-        var studentData = studentDoc.data() as Map<String, dynamic>;
-        if (studentData['isAnonymous'] == false) {
-          // If isAnonymous is false, display real name
+      if (widget.isAnonymous) {
+        setState(() {
+          _studentName = widget.anonymousName;
+        });
+      } else {
+        DocumentSnapshot studentDoc = await FirebaseFirestore.instance.collection('students').doc(widget.studentId).get();
+        if (studentDoc.exists) {
+          var studentData = studentDoc.data() as Map<String, dynamic>;
           setState(() {
             _studentName = '${studentData['firstName']} ${studentData['middleName']} ${studentData['lastName']}';
-          });
-        } else {
-          // If isAnonymous is true, display 'Anonymous'
-          setState(() {
-            _studentName = 'Anonymous';
           });
         }
       }
@@ -88,7 +94,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
 
   String _getChatId(String id1, String id2) {
     final sortedIds = [id1, id2]..sort();
-    return sortedIds.join('_');
+    return widget.isAnonymous ? 'anonymous_${sortedIds.join('_')}' : sortedIds.join('_');
   }
 
   Future<void> _startRecording() async {
@@ -99,6 +105,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
       setState(() {
         _isRecording = true;
       });
+      _lottieController.repeat();
     } catch (e) {
       print('Error starting recording: $e');
     }
@@ -110,7 +117,8 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
       setState(() {
         _isRecording = false;
       });
-      _uploadVoiceMessage();
+      _lottieController.stop();
+      await _uploadVoiceMessage();
     } catch (e) {
       print('Error stopping recording: $e');
     }
@@ -118,14 +126,18 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
 
   Future<void> _uploadVoiceMessage() async {
     if (_recordingPath != null) {
-      final file = File(_recordingPath!);
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('voice_messages')
-          .child('${DateTime.now().millisecondsSinceEpoch}.aac');
-      await ref.putFile(file);
-      final url = await ref.getDownloadURL();
-      _sendVoiceMessage(url);
+      try {
+        final file = File(_recordingPath!);
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('voice_messages')
+            .child('${DateTime.now().millisecondsSinceEpoch}.aac');
+        await ref.putFile(file);
+        final url = await ref.getDownloadURL();
+        _sendVoiceMessage(url);
+      } catch (e) {
+        print('Error uploading voice message: $e');
+      }
     }
   }
 
@@ -133,8 +145,8 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('messages').add({
       'audioUrl': url,
       'senderId': widget.studentId,
-      'senderName': _studentName,
-      'isAnonymous': false,  // Adjust this based on your logic
+      'senderName': widget.isAnonymous ? widget.anonymousName : _studentName,
+      'isAnonymous': widget.isAnonymous,
       'timestamp': FieldValue.serverTimestamp(),
       'type': 'audio',
     });
@@ -156,8 +168,8 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('messages').add({
       'text': text,
       'senderId': widget.studentId,
-      'senderName': _studentName,
-      'isAnonymous': false,  // Adjust this based on your logic
+      'senderName': widget.isAnonymous ? widget.anonymousName : _studentName,
+      'isAnonymous': widget.isAnonymous,
       'timestamp': FieldValue.serverTimestamp(),
       'type': 'text',
     });
@@ -174,8 +186,38 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     });
   }
 
-  void _deleteMessage(String messageId) {
-    FirebaseFirestore.instance.collection('chats').doc(_chatId).collection('messages').doc(messageId).delete();
+  Future<void> _deleteMessage(String messageId) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Unsend Message'),
+          content: Text('Are you sure you want to unsend this message? This action cannot be undone.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: Text('Unsend'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Theme.of(context).cardColor,
+          elevation: 8,
+        );
+      },
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(_chatId)
+          .collection('messages')
+          .doc(messageId)
+          .delete();
+    }
   }
 
   void _editMessage(String messageId, String currentText) {
@@ -190,7 +232,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -214,11 +256,23 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
-            IconButton(
-              icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-              onPressed: _isRecording ? _stopRecording : _startRecording,
-              color: AppTheme.primaryRed,
+            GestureDetector(
+              onTap: _isRecording ? _stopRecording : _startRecording,
+              child: Container(
+                width: 40,
+                height: 40,
+                child: _isRecording
+                    ? Lottie.asset(
+                  'assets/anim/recording-anim.json',
+                  controller: _lottieController,
+                  onLoaded: (composition) {
+                    _lottieController.duration = composition.duration;
+                  },
+                )
+                    : Icon(Icons.mic, color: AppTheme.primaryRed),
+              ),
             ),
+            SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: _messageController,
@@ -239,7 +293,7 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
             Container(
               decoration: BoxDecoration(
                 color: AppTheme.primaryRed,
-                borderRadius: BorderRadius.circular(24),
+                shape: BoxShape.circle,
               ),
               child: IconButton(
                 icon: Icon(_isEditing ? Icons.check : Icons.send, color: Colors.white),
@@ -256,8 +310,12 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat with ${widget.chatPartnerName}'),
+        title: Text('Chat with ${widget.chatPartnerName}', style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppTheme.primaryRed,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+        ),
       ),
       body: Column(
         children: [
@@ -270,31 +328,52 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No messages yet'));
+                }
+
+                final messages = snapshot.data!.docs;
+
                 return ListView.builder(
                   reverse: true,
                   controller: _scrollController,
-                  itemCount: snapshot.data!.docs.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                  itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    var message = snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                    var messageId = snapshot.data!.docs[index].id;
-                    return MessageBubble(
-                      message: message,
-                      isMe: message['senderId'] == widget.studentId,
-                      player: _player,
-                      onEdit: message['senderId'] == widget.studentId
-                          ? () => _editMessage(messageId, message['text'])
-                          : null,
-                      onDelete: message['senderId'] == widget.studentId
-                          ? () => _deleteMessage(messageId)
-                          : null,
+                    final message = messages[index].data() as Map<String, dynamic>;
+                    final messageId = messages[index].id;
+                    final isMe = message['senderId'] == widget.studentId;
+                    final previousMessage = index < messages.length - 1 ? messages[index + 1].data() as Map<String, dynamic> : null;
+                    final showTimestamp = previousMessage == null ||
+                        _shouldShowTimestamp(message['timestamp'], previousMessage['timestamp']);
+
+                    return Column(
+                      children: [
+                        if (showTimestamp)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              _formatTimestamp(message['timestamp']),
+                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            ),
+                          ),
+                        MessageBubble(
+                          message: message,
+                          isMe: isMe,
+                          player: _player,
+                          onEdit: isMe ? () => _editMessage(messageId, message['text']) : null,
+                          onDelete: isMe ? () => _deleteMessage(messageId) : null,
+                          anonymousName: widget.anonymousName,
+                        ),
+                      ],
                     );
                   },
                 );
@@ -306,110 +385,25 @@ class _StudentVoiceChatScreenState extends State<StudentVoiceChatScreen> {
       ),
     );
   }
-}
 
-class MessageBubble extends StatefulWidget {
-  final Map<String, dynamic> message;
-  final bool isMe;
-  final FlutterSoundPlayer player;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
+  bool _shouldShowTimestamp(Timestamp? current, Timestamp? previous) {
+    if (current == null || previous == null) return true;
+    final currentDate = current.toDate();
+    final previousDate = previous.toDate();
+    return currentDate.difference(previousDate).inMinutes >= 30;
+  }
 
-  const MessageBubble({
-    Key? key,
-    required this.message,
-    required this.isMe,
-    required this.player,
-    this.onEdit,
-    this.onDelete,
-  }) : super(key: key);
-
-  @override
-  _MessageBubbleState createState() => _MessageBubbleState();
-}
-
-class _MessageBubbleState extends State<MessageBubble> {
-  bool _isPlaying = false;
-
-  Future<void> _togglePlayback() async {
-    if (_isPlaying) {
-      await widget.player.stopPlayer();
+  String _formatTimestamp(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    final date = timestamp.toDate();
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return 'Today ${DateFormat.jm().format(date)}';
+    } else if (date.year == now.year && date.month == now.month && date.day == now.day - 1) {
+      return 'Yesterday ${DateFormat.jm().format(date)}';
     } else {
-      await widget.player.startPlayer(
-        fromURI: widget.message['audioUrl'],
-        whenFinished: () {
-          setState(() {
-            _isPlaying = false;
-          });
-        },
-      );
+      return DateFormat.yMMMd().add_jm().format(date);
     }
-    setState(() {
-      _isPlaying = !_isPlaying;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-        decoration: BoxDecoration(
-          color: widget.isMe ? AppTheme.primaryRed : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.message['isAnonymous'] == false ? widget.message['senderName'] : 'Anonymous',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: widget.isMe ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            if (widget.message['type'] == 'text')
-              Text(
-                widget.message['text'],
-                style: TextStyle(color: widget.isMe ? Colors.white : Colors.black87),
-              )
-            else if (widget.message['type'] == 'audio')
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ElevatedButton.icon(
-                    icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                    label: Text(_isPlaying ? 'Pause' : 'Play'),
-                    onPressed: _togglePlayback,
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: widget.isMe ? AppTheme.primaryRed : Colors.white,
-                      backgroundColor: widget.isMe ? Colors.white : AppTheme.primaryRed,
-                    ),
-                  ),
-                ],
-              ),
-            if (widget.isMe && widget.message['type'] == 'text')
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 16),
-                    onPressed: widget.onEdit,
-                    color: Colors.white,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, size: 16),
-                    onPressed: widget.onDelete,
-                    color: Colors.white,
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }
+

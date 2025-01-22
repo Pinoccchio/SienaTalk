@@ -15,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late Future<DocumentSnapshot> _studentDataFuture;
   bool _isAnonymous = false;
+  String _anonymousName = '';
 
   @override
   void initState() {
@@ -30,14 +31,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _updateAnonymityStatus(bool isAnonymous) async {
+    if (isAnonymous && _anonymousName.isEmpty) {
+      await _promptForAnonymousName();
+    }
+
     await FirebaseFirestore.instance
         .collection('students')
         .doc(widget.studentId)
-        .update({'isAnonymous': isAnonymous});
+        .update({
+      'isAnonymous': isAnonymous,
+      if (isAnonymous) 'anonymousName': _anonymousName,
+    });
+
     setState(() {
       _isAnonymous = isAnonymous;
       _studentDataFuture = _fetchStudentData();
     });
+  }
+
+  Future<void> _promptForAnonymousName() async {
+    String? name = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        String tempName = '';
+        return AlertDialog(
+          title: Text('Choose Anonymous Name'),
+          content: TextField(
+            onChanged: (value) => tempName = value,
+            decoration: InputDecoration(hintText: "Enter your anonymous name"),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop(tempName);
+              },
+            ),
+          ],
+        );
+      },
+    );
+
+    if (name != null && name.isNotEmpty) {
+      setState(() {
+        _anonymousName = name;
+      });
+    }
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -108,6 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           final middleName = studentData['middleName'] ?? 'N/A';
           final lastName = studentData['lastName'] ?? 'N/A';
           _isAnonymous = studentData['isAnonymous'] ?? false;
+          _anonymousName = studentData['anonymousName'] ?? '';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -127,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 SizedBox(height: 24),
                 Text(
-                  _isAnonymous ? 'Anonymous' : '$firstName $middleName $lastName',
+                  _isAnonymous ? _anonymousName : '$firstName $middleName $lastName',
                   style: Theme.of(context).textTheme.headline5?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -148,6 +189,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                   secondary: Icon(Icons.visibility_off),
                 ),
+                if (_isAnonymous) ...[
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await _promptForAnonymousName();
+                      if (_anonymousName.isNotEmpty) {
+                        await FirebaseFirestore.instance
+                            .collection('students')
+                            .doc(widget.studentId)
+                            .update({'anonymousName': _anonymousName});
+                        setState(() {
+                          _studentDataFuture = _fetchStudentData();
+                        });
+                      }
+                    },
+                    child: Text('Change Anonymous Name'),
+                  ),
+                ],
                 SizedBox(height: 24),
                 if (!_isAnonymous) ...[
                   _buildInfoCard('First Name', firstName, Icons.person),
@@ -196,3 +255,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+

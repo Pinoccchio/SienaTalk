@@ -94,14 +94,17 @@ class AdminChatOverviewScreen extends StatelessWidget {
       for (var student in studentsSnapshot.docs) {
         final studentData = student.data();
         final studentId = studentData['id'] ?? 'N/A';
-        final chatId = _getChatId(employeeId, studentId);
+        final regularChatId = _getChatId(employeeId, studentId);
+        final anonymousChatId = 'anonymous_${_getChatId(employeeId, studentId)}';
 
-        final messageCount = await _getMessageCount(chatId);
+        final regularMessageCount = await _getMessageCount(regularChatId);
+        final anonymousMessageCount = await _getMessageCount(anonymousChatId);
 
-        if (messageCount > 0) {
+        if (regularMessageCount > 0 || anonymousMessageCount > 0) {
           studentChats.add({
             ...studentData,
-            'messageCount': messageCount,
+            'regularMessageCount': regularMessageCount,
+            'anonymousMessageCount': anonymousMessageCount,
           });
         }
       }
@@ -146,29 +149,55 @@ class AdminChatOverviewScreen extends StatelessWidget {
           employeeName,
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.primaryRed),
         ),
-        children: studentChats.map((studentChat) {
+        children: studentChats.expand((studentChat) {
           final studentName = '${studentChat['firstName']} ${studentChat['lastName']}';
           final studentId = studentChat['id'];
-          final messageCount = studentChat['messageCount'];
+          final regularMessageCount = studentChat['regularMessageCount'];
+          final anonymousMessageCount = studentChat['anonymousMessageCount'];
+          final anonymousName = studentChat['anonymousName'] ?? 'Anonymous';
 
-          return ListTile(
-            leading: _buildAvatar(studentName, studentChat['avatarUrl']),
-            title: Text(studentName),
-            subtitle: Text('Messages: $messageCount'),
-            trailing: Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AdminChatViewScreen(
-                    chatId: _getChatId(employeeId, studentId),
-                    employeeName: employeeName,
-                    studentName: studentName,
-                  ),
-                ),
-              );
-            },
-          );
+          return [
+            if (regularMessageCount > 0)
+              ListTile(
+                leading: _buildAvatar(studentName, studentChat['avatarUrl']),
+                title: Text(studentName),
+                subtitle: Text('Regular Messages: $regularMessageCount'),
+                trailing: Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AdminChatViewScreen(
+                        chatId: _getChatId(employeeId, studentId),
+                        employeeName: employeeName,
+                        studentName: studentName,
+                        isAnonymous: false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            if (anonymousMessageCount > 0)
+              ListTile(
+                leading: _buildAvatar(anonymousName, null),
+                title: Text('$anonymousName (Anonymous)'),
+                subtitle: Text('Anonymous Messages: $anonymousMessageCount'),
+                trailing: Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AdminChatViewScreen(
+                        chatId: 'anonymous_${_getChatId(employeeId, studentId)}',
+                        employeeName: employeeName,
+                        studentName: anonymousName,
+                        isAnonymous: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ];
         }).toList(),
       ),
     );
@@ -196,5 +225,4 @@ class AdminChatOverviewScreen extends StatelessWidget {
     );
   }
 }
-
 

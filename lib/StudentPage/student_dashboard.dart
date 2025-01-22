@@ -37,9 +37,25 @@ class _StudentDashboardState extends State<StudentDashboard> {
     final snapshot = await FirebaseFirestore.instance
         .collection('scheduleRequests')
         .where('studentId', isEqualTo: widget.studentId)
+        .where('isNewForStudent', isEqualTo: true)
         .get();
 
-    return snapshot.docs.where((doc) => !_readActivityIds.contains(doc.id)).length;
+    return snapshot.docs.length;
+  }
+
+  Future<void> _markNotificationsAsRead() async {
+    final batch = FirebaseFirestore.instance.batch();
+    final snapshot = await FirebaseFirestore.instance
+        .collection('scheduleRequests')
+        .where('studentId', isEqualTo: widget.studentId)
+        .where('isNewForStudent', isEqualTo: true)
+        .get();
+
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {'isNewForStudent': false});
+    }
+
+    await batch.commit();
   }
 
   @override
@@ -135,19 +151,30 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   Widget _buildNotificationIcon() {
-    return FutureBuilder<int>(
-      future: _getUnreadCount(),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('scheduleRequests')
+          .where('studentId', isEqualTo: widget.studentId)
+          .where('isNewForStudent', isEqualTo: true)
+          .snapshots(),
       builder: (context, snapshot) {
-        int unreadCount = snapshot.data ?? 0;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator();
+        }
+
+        int unreadCount = snapshot.data?.docs.length ?? 0;
 
         return Stack(
           children: [
             IconButton(
               icon: Icon(Icons.notifications, color: Colors.white),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => RecentActivityScreen(studentId: widget.studentId)),
-              ),
+              onPressed: () async {
+                await _markNotificationsAsRead();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => RecentActivityScreen(studentId: widget.studentId)),
+                );
+              },
             ),
             if (unreadCount > 0)
               Positioned(
@@ -217,10 +244,18 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     context,
                     icon: Icons.schedule_send,
                     title: 'Request Scheduling',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => StudentScheduleRequest(studentId: widget.studentId)),
-                    ),
+                    onTap: () {
+                      final now = DateTime.now();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => StudentScheduleRequest(
+                            studentId: widget.studentId,
+                            initialDate: now,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   _buildFeatureCard(
                     context,
@@ -275,3 +310,4 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 }
+
